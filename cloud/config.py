@@ -32,6 +32,10 @@ PLAN_MINUTES = {
 # cloud/metering.py against a synthetic calendar-month period. Setting
 # FREE_PLAN_MINUTES = 0 disables the free plan.
 FREE_PLAN_MINUTES = 20
+# An address erased (DELETE /api/account) within this many days gets no free
+# minutes when it signs up again: deleting and re-registering was a way to
+# reset the monthly allowance (15 re-registrations by 6 accounts, sep-2026).
+FREE_REDO_BLOCK_DAYS = 90
 # Free is open to Google accounts AND permanent email accounts; disposable /
 # temp-mail domains are blocked at sign-up (cloud/email_policy) and aliases are
 # normalized, so the plan isn't a multi-account faucet.

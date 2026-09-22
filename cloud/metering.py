@@ -386,6 +386,11 @@ def free_plan_eligible(user) -> bool:
     """
     if user is None or config.FREE_PLAN_MINUTES <= 0:
         return False
+    # Denied accounts (re-registered after an erasure, temp-mail MX): no free
+    # minutes whatever the sign-in method. getattr: test doubles and rows
+    # loaded before the column existed.
+    if getattr(user, "free_plan_denied", None):
+        return False
     if user.google_sub:
         return True
     # Email account: eligible unless the domain is disposable.
@@ -409,10 +414,18 @@ def free_period_end(now: datetime | None = None) -> datetime:
 
 
 async def is_free_user(session, user_id) -> bool:
-    """Google-authed user currently on the free plan (no active/trialing sub)."""
+    """User currently on the free tier (no active/trialing sub).
+
+    Used by the retention sweeps: an account whose free minutes were withdrawn
+    (``free_plan_denied``) still keeps its library on the free 7-day expiry,
+    not forever.
+    """
     if await _active_subscription(session, user_id):
         return False
-    return free_plan_eligible(await session.get(User, user_id))
+    user = await session.get(User, user_id)
+    if user is not None and getattr(user, "free_plan_denied", None):
+        return True
+    return free_plan_eligible(user)
 
 
 async def _plan_used_this_period(session, user_id, period_end) -> Decimal:

@@ -16,6 +16,8 @@ _sessionmaker = None
 _ADDITIVE_COLUMNS = (
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
     "marketing_opt_out BOOLEAN NOT NULL DEFAULT false",
+    # Nullable, no default: a catalog-only change, no table rewrite.
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS free_plan_denied VARCHAR(32)",
 )
 
 

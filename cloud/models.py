@@ -35,6 +35,14 @@ class User(Base):
     # existing database.
     marketing_opt_out = Column(Boolean, nullable=False, server_default="false",
                                default=False)
+    # Why this account gets no free monthly minutes, or NULL (the normal case).
+    # Set at sign-up for an address erased in the last FREE_REDO_BLOCK_DAYS
+    # ("recreated_after_deletion": deleting and re-registering handed out a
+    # fresh 20 minutes), and for accounts whose mail domain turns out to be a
+    # temp-mail front ("disposable_mx"), which the domain list alone cannot
+    # see. Paid plans and top-ups are untouched; clearing it restores the free
+    # plan. Added to existing databases by cloud/database._ADDITIVE_COLUMNS.
+    free_plan_denied = Column(String(32), nullable=True)
 
 
 class MagicLinkToken(Base):
