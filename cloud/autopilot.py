@@ -265,11 +265,15 @@ async def is_youtube_short(video_id: str) -> bool:
     """True when YouTube serves this id as a Short.
 
     ``/shorts/<id>`` answers 200 for a Short and redirects to ``/watch`` for a
-    regular video. Any other answer (a consent page, a bot check) reads as
-    "not a Short" and the normal pipeline's own too-short gate still applies.
+    regular video. From the prod servers (EU) YouTube first redirects every
+    request to consent.youtube.com, which read as "not a Short" and let a Short
+    through (22-sep-2026); the SOCS/CONSENT cookies skip that page. Any other
+    answer (a bot check) still reads as "not a Short" and the normal
+    pipeline's own too-short gate applies.
     """
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False,
+                                     cookies={"SOCS": "CAI", "CONSENT": "YES+"}) as client:
             resp = await client.head(f"https://www.youtube.com/shorts/{video_id}")
         return resp.status_code == 200
     except Exception:
