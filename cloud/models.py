@@ -6,6 +6,7 @@ usage_ledger) are designed for atomic, restart-safe metering — see cloud/meter
 import uuid
 from sqlalchemy import (
     Column, String, Integer, Numeric, Boolean, DateTime, ForeignKey, Text, func, Index,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, CITEXT, JSONB
 
@@ -319,3 +320,65 @@ class ProxyUsage(Base):
     route = Column(String(32), nullable=True)            # winning attempt label, or "none"
     paid_bytes = Column(Integer, nullable=False, default=0)
     detail = Column(JSONB, nullable=True)                # attempts: [{label, ok, bytes, error}]
+
+
+class AutopilotSettings(Base):
+    """Per-user switch for Autopilot: clip every new video on the user's
+    connected YouTube channel, and optionally publish the best clips.
+
+    The channel itself is not stored here. It is whatever YouTube account the
+    user connected to their Upload-Post profile, read at poll time, so
+    reconnecting a different channel just works and disconnecting stops it.
+
+    ``enabled_at`` is the baseline: only videos published after it are clipped
+    automatically, so switching Autopilot on never burns the month on the back
+    catalogue. Older videos can still be clipped by hand from the same page.
+    """
+    __tablename__ = "autopilot_settings"
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+                     primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    enabled_at = Column(DateTime(timezone=True), nullable=True)
+    # The user confirmed they own (or have rights to) the channel's content.
+    # /api/process requires that attestation per job; Autopilot records it once.
+    rights_ack_at = Column(DateTime(timezone=True), nullable=True)
+    autopublish = Column(Boolean, nullable=False, default=False)
+    publish_platforms = Column(JSONB, nullable=True)      # ["tiktok", "instagram", "youtube"]
+    clips_to_publish = Column(Integer, nullable=False, default=3)
+    max_minutes = Column(Integer, nullable=False, default=30)
+    # Autopublish slot: one clip a day at this local hour, in this IANA zone.
+    publish_hour = Column(Integer, nullable=False, default=17)
+    timezone = Column(Text, nullable=True)
+    last_checked_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AutopilotRun(Base):
+    """One channel video Autopilot picked up, and what happened to it.
+
+    The (user_id, video_id) unique constraint is the dedupe: during a deploy two
+    API containers run the poller at once, and only the one whose INSERT wins
+    submits the job.
+    """
+    __tablename__ = "autopilot_runs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    video_id = Column(Text, nullable=False)
+    video_url = Column(Text, nullable=True)
+    video_title = Column(Text, nullable=True)
+    thumbnail_url = Column(Text, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    trigger = Column(String(12), nullable=False, default="auto")   # auto | manual
+    status = Column(String(16), nullable=False, default="queued")  # queued | processing | completed | failed | skipped
+    reason = Column(Text, nullable=True)
+    job_id = Column(Text, nullable=True, index=True)
+    clips_count = Column(Integer, nullable=True)
+    posted_count = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (
+        UniqueConstraint("user_id", "video_id", name="uq_autopilot_user_video"),
+    )
